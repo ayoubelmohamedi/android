@@ -44,27 +44,24 @@ class OCCapabilityViewModel(
     private val _capabilities = MediatorLiveData<UIResult<OCCapability>>()
     val capabilities: LiveData<UIResult<OCCapability>> = _capabilities
 
-    private var capabilitiesLiveData: LiveData<OCCapability?> = getStoredCapabilitiesUseCase.execute(
-        GetStoredCapabilitiesUseCase.Params(
-            accountName = accountName
-        )
-    )
-
-    // to detect changes in capabilities
-    private val capabilitiesObserver: Observer<OCCapability?> = Observer { capabilities ->
-        if (capabilities != null) {
-            _capabilities.postValue(UIResult.Success(capabilities))
-        }
-    }
-
     init {
-        capabilitiesLiveData.observeForever(capabilitiesObserver)
+        _capabilities.addSource(
+            getStoredCapabilitiesUseCase.execute(
+                GetStoredCapabilitiesUseCase.Params(
+                    accountName = accountName
+                )
+            )
+        ) { capabilitiesFromDatabase ->
+            capabilitiesFromDatabase?.let {
+                _capabilities.postValue(UIResult.Success(capabilitiesFromDatabase))
+            }
+        }
     }
 
     fun refreshCapabilitiesFromNetwork() {
         viewModelScope.launch {
             _capabilities.postValue(
-                UIResult.Loading(capabilitiesLiveData.value)
+                UIResult.Loading()
             )
 
             val useCaseResult = withContext(Dispatchers.IO) {
@@ -77,14 +74,9 @@ class OCCapabilityViewModel(
 
             if (!useCaseResult.isSuccess) {
                 _capabilities.postValue(
-                    UIResult.Error(useCaseResult.getThrowableOrNull(), capabilitiesLiveData.value)
+                    UIResult.Error(useCaseResult.getThrowableOrNull())
                 )
             }
         }
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        capabilitiesLiveData.removeObserver(capabilitiesObserver)
     }
 }
